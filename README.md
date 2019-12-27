@@ -1,7 +1,5 @@
-# bili
-# bili
-
-哔哩哔哩爬虫，每天定时爬取关键字的所有视频信息，主要爬取的内容是一个搜索一个关键字的内容，并统计它的排名、用户名、视频信息、视频编号、点赞、播放、收藏、转发、面包屑导航等。
+# 哔哩哔哩指定词汇爬虫
+> 哔哩哔哩爬虫，每天定时爬取所定义关键字的所有视频信息，主要爬取的内容是排名、用户名、用户账号、视频信息、视频编号、点赞、播放、收藏、转发、面包屑导航等(类型)、发布时间、。
 
 首先是遍历关键字的page，最多的视频是有50页，所以就是遍历50次（就算有些关键词不够50页，B站也不会报404错误，说明它的seo做的还是不错）
 项目初始，就准备用队列配合多线程的方式做，并且存储到mongodb中，这样的话效率相对高。
@@ -23,37 +21,41 @@ for key in keys:
 核心代码如下：
 
 ```python
-class MyBili(threading.Thread):
+# 获取番号类
+class Get_url(threading.Thread):
+
     def __init__(self,pageQ,urlQ,key,lock):
         threading.Thread.__init__(self)
         self.urlQ = urlQ
         self.pageQ = pageQ
         self.key = key
-        self.client = MongoClient(host="127.0.0.1", port=27017)
-        self.collection = self.client["jihe"]["data"]  # 没有不用担心，插入数据之后就有了
         self.lock = lock
         self.headers = {}
         self.result={}
         self.headers["User-Agent"] = UserAgent().random
         self.defu =0
-        
+
     def run(self):
-        self.get_url()
-        
-    def get_url(self):
         print("开始av线程"+self.key)
+        self.get_video_info()
+        print("结束av线程"+self.key)
+
+    def get_video_info(self):
         while True:
             if self.pageQ.empty():
                 break
-            lock.acquire()
+            self.lock.acquire()
             url = self.pageQ.get()
-            lock.release()
             print(url)
-            respone = requests.get(url,headers = self.headers)
+            respones = requests.get(url,headers = self.headers)
+            time.sleep(1)
             reg = """class="video-item matrix"><a href="//www.bilibili.com/video/av([\s\S]*?)from"""  # 正则表达式
             regex = re.compile(reg, re.IGNORECASE)  # 预编译
-            respone = regex.findall(respone.text)  # 第一次正则
-            for i in respone:
+            res = regex.findall(respones.text)  # 正则获取内容
+            print(res)
+
+            #获取番号(视频编号)
+            for i in res:
                 data = {}
                 self.defu += 1
                 i = str(i).replace("?", "")
@@ -62,10 +64,9 @@ class MyBili(threading.Thread):
                 data["av"] = i
                 print(data)
                 urlQ.put(data)
-                t1 = self.collection.insert_one(data)
-                print(t1)
+            self.lock.release()
             urlQ.task_done()
-        print("结束av线程"+self.key)
+
 ```
   3.在解析B站网页代码的时候，发现根本获取不它的数据，但它的数据的确是显示出来了呀，先打开net12，network,载刷新页面检测数据。
   并且随便搜索一个容易搜索的关键字收藏的个数，发现在最下方会有两个b站的api调用，有api能用当然是好事儿了，直接调用api就好了。
@@ -103,31 +104,36 @@ class MyBili(threading.Thread):
 核心代码如下：
 
 ```python
-class Get_url(threading.Thread):
-    def __init__(self,urlQ,dataQ,sheet):
+# 获取视频信息
+class Get_video_info(threading.Thread):
+
+    def __init__(self,urlQ):
         threading.Thread.__init__(self)
         self.headers = {}
         self.result = {}
-        self.sheet = sheet
         self.urlQ = urlQ
-        self.dataQ = dataQ
         self.client = MongoClient(host="127.0.0.1", port=27017)
-        self.collection = self.client["shuju"]["wanglishuai"]  # 没有不用担心，插入数据之后就有了
         self.headers["User-Agent"] = UserAgent().random
 
     def run(self):
         self.test_get()
+
+    # 获取视频信息
     def test_get(self):
         print("开始api线程")
 
         while True:
             if self.urlQ.empty():
                 break
+            lock.acquire()
             i = self.urlQ.get()
             url = "http://api.bilibili.com/x/web-interface/view?aid={}".format(i["av"])  # 视频信息api
+            #获取第一个分区
+            respone = requests.get("https://www.bilibili.com/video/av{}".format(i["av"])).text
+            html = etree.HTML(respone)
+            cotegory1 = html.xpath('//span[@class="a-crumbs"]/a')[0].text
             req = requests.get(url, headers=self.headers).json()
-            time.sleep(1)
-            lock.acquire()
+            time.sleep(1) # 延时一秒，太快会限制ip访问,会导致线程阻塞
             data = req["data"]
             owner = data["owner"]
             stat = data["stat"]
@@ -145,7 +151,7 @@ class Get_url(threading.Thread):
             self.result["video_coin_num"] = stat["coin"]  # 投币
             self.result["video_favorite_num"] = stat["favorite"]  # 收藏
             self.result["video_forward_num"] = stat["share"]  # 转发 8项
-            self.result["category_1"] = ""
+            self.result["category_1"] = cotegory1
             self.result["category_2"] = data["tname"]  # 分区2
             url3 = "https://api.bilibili.com/x/web-interface/card?mid={}".format(self.result["up_id"])  # 作者信息api
             req = requests.get(url3, headers=self.headers).json()
@@ -156,16 +162,60 @@ class Get_url(threading.Thread):
             if i["key"]=="简历":
                 self.collection=self.client["shuju"]["简历"]
             elif i["key"]=="简历模板":
-                self.collection = self.client["shuju"]["模板"]
+                self.collection = self.client["shuju"]["简历模板"]
+            elif i["key"]=="找工作":
+                self.collection = self.client["shuju"]["找工作"]
+            elif i["key"]=="实习":
+                self.collection = self.client["shuju"]["实习"]
+            elif i["key"]=="笔试":
+                self.collection = self.client["shuju"]["笔试"]
+            elif i["key"]=="职场":
+                self.collection = self.client["shuju"]["职场"]
+            elif i["key"]=="面试":
+                self.collection = self.client["shuju"]["面试"]
             else:
-                self.collection = self.client["shuju"]["qita"]
+                self.collection = self.client["shuju"]["other"]
             lock.release()
-
             sex = self.collection.insert_one(self.result)
-            self.dataQ.put(self.result)
-            self.dataQ.task_done()
             print(sex)
-
         print("结束api线程")
-
 ```
+下一步就是把存储到MongoDB中的数据，写到excel表中，这儿我本来想从队列中区数据，再配合多线程的方式添加数据进去，但是经过很多次的尝试，发现效果并没有直接从MongoDB来的快，几乎没多少秒就搞定了。
+
+```python
+#生成Excel表
+class Save_excel():
+    def __init__(self):
+        self.book = xlwt.Workbook(encoding="utf-8")
+        self.t1 = {"search_terms": "笔试", "search_rank": 19, "up_id": 471801158, "up_username": "路飞学城小媛老师",
+                          "video_url": "https://www.bilibili.com/video/80572356", "video_name": "[案例篇] 使用python自动生成word简历",
+                          "vide_published_at": 1577264427, "video_playback_num": 49, "video_barrage_num": 0,
+                          "video_like_num": 4,
+                          "video_coin_num": 2, "video_favorite_num": 7, "video_forward_num": 0, "category_1": "",
+                          "category_2": "演讲• 公开课", "up_follow_num": 1260}
+    def test_get(self,key,collection):
+            datas = collection.find()
+            print("正在生成"+key+".xls...")
+            # 增加一个sheet
+            sheet = self.book.add_sheet(key, cell_overwrite_ok=True)
+            # 写表头
+            num = 0
+            for i in self.t1:
+                sheet.write(0, num, i)
+                num += 1
+            #写数据
+            line = 1
+            for data in datas:
+                num = 0
+                for i in data.items():
+                    if i[0]=="_id":
+                        continue
+                    sheet.write(line,num,i[1])
+                    num+=1
+                line+=1
+            self.book.save(key+".xls")
+            print("生成"+key+".xls表成功！")
+            print("--------------------")
+```
+
+主要文件已经上传到Github中了，欢迎大家指正。
