@@ -40,7 +40,6 @@ class Get_url(threading.Thread):
             if self.pageQ.empty():
                 break
             url = self.pageQ.get()
-            print(url)
             respones = requests.get(url,headers = self.headers)
             time.sleep(1)
             reg = """class="video-item matrix"><a href="//www.bilibili.com/video/av([\s\S]*?)from"""  # 正则表达式
@@ -54,7 +53,6 @@ class Get_url(threading.Thread):
                 data["id"] = self.defu
                 data["key"] = self.key
                 data["av"] = i
-                print(data)
                 urlQ.put(data)
                 urlQ.task_done()
 
@@ -173,8 +171,17 @@ class Save_excel():
 
 
 # 关键字
-# keys = ["简历", "简历模板","面试", "实习", "找工作", "笔试", "职场"]
-keys = ["简历", "简历模板"]
+keys = ["简历", "简历模板","面试", "实习", "找工作", "笔试", "职场"]
+
+client = MongoClient(host="127.0.0.1", port=27017)
+dblist = client.list_database_names()
+
+if "shuju" in dblist:
+    print("数据库存在！")
+    client.drop_database("shuju")
+    print("数据库清空成功")
+
+
 
 # 创建队列
 pageQ = queue.Queue()
@@ -211,7 +218,6 @@ for t in get_video_infos:
 
 # 实例化存储Excel类
 save = Save_excel()
-client = MongoClient(host="127.0.0.1", port=27017)
 # 开始读取mongodb，生成excel
 for key in keys:
     collection = client["shuju"][key]
@@ -219,4 +225,3 @@ for key in keys:
 
 end = time.time()
 print("程序结束，共使用："+str(end-start)+"秒")
-
