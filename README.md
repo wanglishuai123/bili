@@ -217,6 +217,16 @@ class Save_excel():
 
 
 使用crontab在服务器定时运行，定时每天早上7点运行，但要考虑一个点，存储到MongoDB中的数据需要全部删掉，所以在程序开始运行时需要判断数据库是否存在，存在就删掉。
+```python
+client = MongoClient(host="127.0.0.1", port=27017)
+dblist = client.list_database_names()
+
+if "shuju" in dblist:
+    print("数据库存在！")
+    client.drop_database("shuju")
+    print("数据库清空成功")
+
+```
 
 关于服务器crontab设置，我使用的是Ubuntu，所以现在正好普及一些crontab的内容
 
