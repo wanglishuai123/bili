@@ -44,16 +44,13 @@ class Get_url(threading.Thread):
         while True:
             if self.pageQ.empty():
                 break
-            self.lock.acquire()
             url = self.pageQ.get()
             print(url)
             respones = requests.get(url,headers = self.headers)
             time.sleep(1)
             reg = """class="video-item matrix"><a href="//www.bilibili.com/video/av([\s\S]*?)from"""  # 正则表达式
             regex = re.compile(reg, re.IGNORECASE)  # 预编译
-            res = regex.findall(respones.text)  # 正则获取内容
-            print(res)
-
+            res = regex.findall(respones.text)  # 第一次正则
             #获取番号(视频编号)
             for i in res:
                 data = {}
@@ -64,9 +61,7 @@ class Get_url(threading.Thread):
                 data["av"] = i
                 print(data)
                 urlQ.put(data)
-            self.lock.release()
-            urlQ.task_done()
-
+                urlQ.task_done()
 ```
   3.在解析B站网页代码的时候，发现根本获取不它的数据，但它的数据的确是显示出来了呀，先打开net12，network,载刷新页面检测数据。
   并且随便搜索一个容易搜索的关键字收藏的个数，发现在最下方会有两个b站的api调用，有api能用当然是好事儿了，直接调用api就好了。
@@ -187,6 +182,7 @@ class Get_video_info(threading.Thread):
 class Save_excel():
     def __init__(self):
         self.book = xlwt.Workbook(encoding="utf-8")
+        # 这儿是直接随便取了一个API的信息，获取其键，作为生成表头的数据
         self.t1 = {"search_terms": "笔试", "search_rank": 19, "up_id": 471801158, "up_username": "路飞学城小媛老师",
                           "video_url": "https://www.bilibili.com/video/80572356", "video_name": "[案例篇] 使用python自动生成word简历",
                           "vide_published_at": 1577264427, "video_playback_num": 49, "video_barrage_num": 0,
@@ -208,6 +204,7 @@ class Save_excel():
             for data in datas:
                 num = 0
                 for i in data.items():
+                    # 跳过ID_栏
                     if i[0]=="_id":
                         continue
                     sheet.write(line,num,i[1])
