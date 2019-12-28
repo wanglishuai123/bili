@@ -215,4 +215,94 @@ class Save_excel():
             print("--------------------")
 ```
 
+
+使用crontab在服务器定时运行，定时每天早上7点运行，但要考虑一个点，存储到MongoDB中的数据需要全部删掉，所以在程序开始运行时需要判断数据库是否存在，存在就删掉。
+
+关于服务器crontab设置，我使用的是Ubuntu，所以现在正好普及一些crontab的内容
+
+1.  启动crontab
+    >sudo service cron start
+2. 查看状态
+    >sudo service cron status
+3. 停止
+   >sudo service cron stop
+4. 在添加任务前，先把编辑器切换成vim，那个默认编辑器是实在用不惯
+    >export EDITOR=vim
+5. 添加任务、删除、修改
+    >crontab -e
+    >crontab -r
+    >建议在代码中注释掉一个任务即可删除任务。
+6. 查看任务
+    >crontab -l
+7. 语法
+```
+*    *    *    *    *
+-    -    -    -    -
+|    |    |    |    |
+|    |    |    |    +----- 星期中星期几 (0 - 7) (星期天 为0)
+|    |    |    +---------- 月份 (1 - 12) 
+|    |    +--------------- 一个月中的第几天 (1 - 31)
+|    +-------------------- 小时 (0 - 23)
++------------------------- 分钟 (0 - 59)
+
+0 */2 * * * /sbin/service httpd restart  意思是每两个小时重启一次apache 
+
+50 7 * * * /sbin/service sshd start  意思是每天7：50开启ssh服务 
+
+50 22 * * * /sbin/service sshd stop  意思是每天22：50关闭ssh服务 
+
+0 0 1,15 * * fsck /home  每月1号和15号检查/home 磁盘 
+
+1 * * * * /home/bruce/backup  每小时的第一分执行 /home/bruce/backup这个文件 
+
+00 03 * * 1-5 find /home "*.xxx" -mtime +4 -exec rm {} \;  每周一至周五3点钟，在目录/home中，查找文件名为*.xxx的文件，并删除4天前的文件。
+
+30 6 */10 * * ls  意思是每月的1、11、21、31日是的6：30执行一次ls命令
+```
+8. 日志记录设置
+```
+    ubuntu默认没有开启cron日志记录 
+    1. 修改rsyslog 
+        sudo vim /etc/rsyslog.d/50-default.conf 
+        cron.* /var/log/cron.log #将cron前面的注释符去掉 
+    2.重启rsyslog 
+        sudo service rsyslog restart 
+    3.查看crontab日志 
+        less /var/log/cron.log
+```
+9. python3如何用crontab运行,设置任务，切记第一行要写python3的绝对路径，包括下方也一样，这是我写的一个测试文件，是输出helloworld内容到test.txt文件中，1分钟执行一次，全部绝对路径！
+```
+#!/usr/bin/python3
+MAILTO=""
+*/1 * * * * /usr/bin/python3 /home/bili/test.py>>/home/bili/test.txt
+``` 
+最终它执行在test.txt中产生的内容
+```
+
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+我是测试model
+```
+所以现在设置任务：每天7执行，注销掉原来的任务只需要前面加#即可
+```
+#!/usr/bin/python3
+MAILTO=""
+0 7 * * * /usr/bin/python3 /home/bili/mybili.py>>/home/bili/mybili.txt
+
+```
+
 主要文件已经上传到Github中了，欢迎大家指正。
+这个程序是在Pycharm中写的，刚在服务器上跑了一下。
+最后会生成以关键字命名的excle文件。
