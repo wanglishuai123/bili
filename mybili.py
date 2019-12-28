@@ -39,7 +39,6 @@ class Get_url(threading.Thread):
         while True:
             if self.pageQ.empty():
                 break
-            self.lock.acquire()
             url = self.pageQ.get()
             print(url)
             respones = requests.get(url,headers = self.headers)
@@ -47,8 +46,6 @@ class Get_url(threading.Thread):
             reg = """class="video-item matrix"><a href="//www.bilibili.com/video/av([\s\S]*?)from"""  # 正则表达式
             regex = re.compile(reg, re.IGNORECASE)  # 预编译
             res = regex.findall(respones.text)  # 第一次正则
-            print(res)
-
             #获取番号(视频编号)
             for i in res:
                 data = {}
@@ -59,12 +56,10 @@ class Get_url(threading.Thread):
                 data["av"] = i
                 print(data)
                 urlQ.put(data)
-            self.lock.release()
-            urlQ.task_done()
+                urlQ.task_done()
 
 
 # 获取视频信息
-
 class Get_video_info(threading.Thread):
 
     def __init__(self,urlQ):
@@ -88,9 +83,10 @@ class Get_video_info(threading.Thread):
             lock.acquire()
             i = self.urlQ.get()
             url = "http://api.bilibili.com/x/web-interface/view?aid={}".format(i["av"])  # 视频信息api
-            respone = requests.get("https://www.bilibili.com/video/av{}".format(i["av"])).text
+            url2 = "https://www.bilibili.com/video/av{}".format(i["av"])                #获取分区1的内容
+            respone = requests.get(url2,headers = self.headers).text
             html = etree.HTML(respone)
-            cotegory1 = html.xpath('//span[@class="a-crumbs"]/a')[0].text
+            cotegory1 = html.xpath('//span[@class="a-crumbs"]/a')[0].text               #分区1的内容
             req = requests.get(url, headers=self.headers).json()
             time.sleep(1) # 延时一秒，太快会限制ip访问,会导致线程阻塞
             data = req["data"]
@@ -101,9 +97,11 @@ class Get_video_info(threading.Thread):
             self.result["search_rank"] = i["id"]  # 搜索排名
             self.result["up_id"] = owner["mid"]  # up主id
             self.result["up_username"] = owner["name"]  # up主用户名
-            self.result["video_url"] = "https://www.bilibili.com/video/{}".format(i["av"])  # 视频链接
+            self.result["video_url"] = "https://www.bilibili.com/video/av{}".format(i["av"])  # 视频链接
             self.result["video_name"] = data["title"]  # 视频名称
-            self.result["vide_published_at"] = data["ctime"]  # 发布时间
+            release_time = time.localtime(data["ctime"])
+            release_time = time.strftime("%Y--%m--%d %H:%M:%S", release_time)
+            self.result["vide_published_at"] = str(release_time)  # 发布时间
             self.result["video_playback_num"] = stat["view"]  # 播放量
             self.result["video_barrage_num"] = stat["danmaku"]  # 弹幕
             self.result["video_like_num"] = stat["like"]  # 点赞
@@ -139,6 +137,7 @@ class Get_video_info(threading.Thread):
             print(sex)
         print("结束api线程")
 
+#生成Excel表
 class Save_excel():
     def __init__(self):
         self.book = xlwt.Workbook(encoding="utf-8")
@@ -220,10 +219,4 @@ for key in keys:
 
 end = time.time()
 print("程序结束，共使用："+str(end-start)+"秒")
-
-
-
-
-
-
 
